@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GlobalChat</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=Newsreader:opsz,wght@6..72,700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="auth-view" id="authView" aria-label="GlobalChat sign in">
+        <div class="brand-panel">
+          <div class="brand-mark">G</div>
+          <h1>GlobalChat</h1>
+          <p>Simple persistent chat with profiles, avatars, timestamps, and browser-saved account credentials.</p>
+        </div>
+
+        <div class="auth-panel">
+          <div class="auth-tabs" role="tablist" aria-label="Account mode">
+            <button class="tab active" id="showSignIn" type="button">Sign in</button>
+            <button class="tab" id="showCreate" type="button">Create account</button>
+          </div>
+
+          <form class="auth-form" id="signInForm" autocomplete="on">
+            <label>
+              Username
+              <input
+                name="username"
+                id="signInUsername"
+                autocomplete="username"
+                required
+                minlength="3"
+                placeholder="yourname"
+              />
+            </label>
+            <label>
+              Password
+              <input
+                name="password"
+                id="signInPassword"
+                type="password"
+                autocomplete="current-password"
+                required
+                minlength="6"
+                placeholder="••••••••"
+              />
+            </label>
+            <button class="primary-button" type="submit">Sign in</button>
+          </form>
+
+          <form class="auth-form hidden" id="createForm" autocomplete="on">
+            <label>
+              Username
+              <input
+                name="username"
+                id="createUsername"
+                autocomplete="username"
+                required
+                minlength="3"
+                maxlength="24"
+                placeholder="globalfriend"
+              />
+            </label>
+            <label>
+              Password
+              <input
+                name="new-password"
+                id="createPassword"
+                type="password"
+                autocomplete="new-password"
+                required
+                minlength="6"
+                placeholder="Choose a strong password"
+              />
+            </label>
+            <button class="primary-button" type="submit">Create account</button>
+          </form>
+
+          <div class="divider"><span>or</span></div>
+          <button class="google-button" id="googleButton" type="button">
+            <span class="google-g">G</span>
+            Sign in with Google
+          </button>
+          <p class="auth-note" id="authMessage" role="status">
+            Chrome can offer to save passwords after you create or sign in to an account.
+          </p>
+        </div>
+      </section>
+
+      <section class="chat-view hidden" id="chatView" aria-label="GlobalChat room">
+        <aside class="sidebar">
+          <div class="sidebar-top">
+            <div class="brand-row">
+              <div class="brand-mark small">G</div>
+              <div>
+                <strong>GlobalChat</strong>
+                <span>Public room</span>
+              </div>
+            </div>
+            <button class="icon-button" id="profileButton" type="button" aria-label="Open profile settings" title="Profile">
+              ⚙
+            </button>
+          </div>
+
+          <div class="profile-card">
+            <img id="currentAvatar" alt="" />
+            <div>
+              <strong id="currentName"></strong>
+              <span>Online now</span>
+            </div>
+          </div>
+
+          <div class="room-summary">
+            <span id="messageCount">0 messages</span>
+            <span>Saved in this browser</span>
+          </div>
+
+          <button class="secondary-button" id="signOutButton" type="button">Sign out</button>
+        </aside>
+
+        <section class="chat-panel">
+          <header class="chat-header">
+            <div>
+              <h2>World room</h2>
+              <p>Messages stay available when you come back on this browser.</p>
+            </div>
+            <button class="secondary-button compact" id="clearMessagesButton" type="button">Clear chat</button>
+          </header>
+
+          <div class="messages" id="messages" aria-live="polite"></div>
+
+          <form class="message-form" id="messageForm">
+            <input id="messageInput" autocomplete="off" maxlength="400" placeholder="Type a message..." required />
+            <button class="send-button" type="submit" aria-label="Send message">➜</button>
+          </form>
+        </section>
+      </section>
+
+      <dialog class="profile-dialog" id="profileDialog">
+        <form method="dialog" class="profile-settings" id="profileForm">
+          <div class="dialog-header">
+            <h2>Profile settings</h2>
+            <button class="icon-button" value="cancel" type="submit" aria-label="Close profile settings">×</button>
+          </div>
+          <label>
+            Display name
+            <input id="profileName" maxlength="28" required />
+          </label>
+          <label>
+            Profile picture URL
+            <input id="profileAvatar" type="url" placeholder="https://example.com/photo.jpg" />
+          </label>
+          <div class="avatar-preview">
+            <img id="avatarPreview" alt="" />
+            <span>Preview</span>
+          </div>
+          <button class="primary-button" value="default" type="submit">Save profile</button>
+        </form>
+      </dialog>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
