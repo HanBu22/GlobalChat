@@ -18,7 +18,7 @@ Discord-style static chat app that becomes global when connected to Firebase.
 5. Enable **Authentication > Sign-in method > Email/Password**.
 6. Enable **Authentication > Sign-in method > Google** if you want Google sign-in.
 7. Create **Firestore Database**.
-8. Use these Firestore rules for a simple public chat demo:
+8. Use `firestore.rules`, or paste these Firestore rules for a simple public chat demo:
 
 ```txt
 rules_version = '2';

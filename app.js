@@ -150,7 +150,9 @@ function formatError(error) {
   if (code.includes("auth/email-already-in-use")) return "That username is already taken.";
   if (code.includes("auth/invalid-credential") || code.includes("auth/wrong-password")) return "Username or password is incorrect.";
   if (code.includes("auth/popup-closed-by-user")) return "Google sign-in was closed before finishing.";
-  if (code.includes("permission-denied")) return "Firebase security rules blocked this action.";
+  if (code.includes("permission-denied")) {
+    return "Firestore security rules blocked this action. Paste firestore.rules into Firebase Console > Firestore Database > Rules, then publish.";
+  }
   return error?.message ?? "Something went wrong.";
 }
 
