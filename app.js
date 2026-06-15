@@ -12,9 +12,13 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import {
   addDoc,
+  arrayRemove,
+  arrayUnion,
   collection,
+  deleteDoc,
   doc,
   getDoc,
+  getDocs,
   getFirestore,
   limit,
   onSnapshot,
@@ -22,6 +26,8 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  updateDoc,
+  where,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 const defaultAvatar =
@@ -70,10 +76,62 @@ const elements = {
   soundVolume: document.querySelector("#soundVolume"),
   testSoundButton: document.querySelector("#testSoundButton"),
   soundQuickButton: document.querySelector("#soundQuickButton"),
+  globalTextButton: document.querySelector("#globalTextButton"),
+  activeChannelIcon: document.querySelector("#activeChannelIcon"),
+  activeChannelName: document.querySelector("#activeChannelName"),
+  memberHeading: document.querySelector("#memberHeading"),
+  voiceStage: document.querySelector("#voiceStage"),
+  voiceRoomType: document.querySelector("#voiceRoomType"),
+  voiceRoomName: document.querySelector("#voiceRoomName"),
+  voiceRoomMeta: document.querySelector("#voiceRoomMeta"),
+  voiceRoomCode: document.querySelector("#voiceRoomCode"),
+  voiceRoomCodeBox: document.querySelector("#voiceRoomCodeBox"),
+  hostTools: document.querySelector("#hostTools"),
+  hostRoomNameInput: document.querySelector("#hostRoomNameInput"),
+  renameRoomButton: document.querySelector("#renameRoomButton"),
+  createVoiceRoomButton: document.querySelector("#createVoiceRoomButton"),
+  joinVoiceRoomButton: document.querySelector("#joinVoiceRoomButton"),
+  createRoomDialog: document.querySelector("#createRoomDialog"),
+  joinRoomDialog: document.querySelector("#joinRoomDialog"),
+  createRoomForm: document.querySelector("#createRoomForm"),
+  newRoomName: document.querySelector("#newRoomName"),
+  newRoomPrivate: document.querySelector("#newRoomPrivate"),
+  joinCodeForm: document.querySelector("#joinCodeForm"),
+  joinCodeInput: document.querySelector("#joinCodeInput"),
+  publicRoomList: document.querySelector("#publicRoomList"),
+  prevRoomsButton: document.querySelector("#prevRoomsButton"),
+  nextRoomsButton: document.querySelector("#nextRoomsButton"),
+  roomPageLabel: document.querySelector("#roomPageLabel"),
+  micButton: document.querySelector("#micButton"),
+  cameraButton: document.querySelector("#cameraButton"),
+  screenShareButton: document.querySelector("#screenShareButton"),
+  leaveVoiceButton: document.querySelector("#leaveVoiceButton"),
+  cameraPreview: document.querySelector("#cameraPreview"),
+  screenPreview: document.querySelector("#screenPreview"),
+  cameraPlaceholder: document.querySelector("#cameraPlaceholder"),
+  screenPlaceholder: document.querySelector("#screenPlaceholder"),
+  localMediaLabel: document.querySelector("#localMediaLabel"),
   accountName: document.querySelector("#accountName"),
   accountId: document.querySelector("#accountId"),
   clearLocalButton: document.querySelector("#clearLocalButton"),
   signOutButton: document.querySelector("#signOutButton"),
+  audioSettings: document.querySelector("#audioSettings"),
+  audioInputSelect: document.querySelector("#audioInputSelect"),
+  audioOutputSelect: document.querySelector("#audioOutputSelect"),
+  cameraSelect: document.querySelector("#cameraSelect"),
+  micVolume: document.querySelector("#micVolume"),
+  speakerVolume: document.querySelector("#speakerVolume"),
+  cameraSaturation: document.querySelector("#cameraSaturation"),
+  cameraBrightness: document.querySelector("#cameraBrightness"),
+  cameraContrast: document.querySelector("#cameraContrast"),
+  cameraSharpness: document.querySelector("#cameraSharpness"),
+  micVolumeValue: document.querySelector("#micVolumeValue"),
+  speakerVolumeValue: document.querySelector("#speakerVolumeValue"),
+  cameraSaturationValue: document.querySelector("#cameraSaturationValue"),
+  cameraBrightnessValue: document.querySelector("#cameraBrightnessValue"),
+  cameraContrastValue: document.querySelector("#cameraContrastValue"),
+  cameraSharpnessValue: document.querySelector("#cameraSharpnessValue"),
+  refreshDevicesButton: document.querySelector("#refreshDevicesButton"),
 };
 
 let auth = null;
@@ -81,14 +139,28 @@ let db = null;
 let currentUser = null;
 let unsubscribeMessages = null;
 let unsubscribeUsers = null;
+let unsubscribeVoiceRooms = null;
 let messagesLoaded = false;
 let latestMessageId = null;
 let currentAvatarData = defaultAvatar;
+let localAudioStream = null;
+let localVideoStream = null;
+let screenStream = null;
 
 const state = {
   messages: [],
   users: new Map(),
+  voiceRooms: [],
+  currentView: "text",
+  activeVoiceRoom: null,
+  roomPage: 0,
   settings: readSettings(),
+};
+
+const officialVoiceRooms = {
+  lounge: { id: "official-lounge", name: "Lounge", code: "LOUNGE", type: "official" },
+  gaming: { id: "official-gaming", name: "Gaming", code: "GAMING", type: "official" },
+  study: { id: "official-study", name: "Study", code: "STUDY", type: "official" },
 };
 
 function hasFirebaseConfig() {
@@ -101,6 +173,12 @@ function readSettings() {
       desktopNotifications: false,
       soundNotifications: true,
       soundVolume: 55,
+      micVolume: 100,
+      speakerVolume: 100,
+      cameraSaturation: 100,
+      cameraBrightness: 100,
+      cameraContrast: 100,
+      cameraSharpness: 100,
       ...JSON.parse(localStorage.getItem(localSettingsKey)),
     };
   } catch {
@@ -108,6 +186,12 @@ function readSettings() {
       desktopNotifications: false,
       soundNotifications: true,
       soundVolume: 55,
+      micVolume: 100,
+      speakerVolume: 100,
+      cameraSaturation: 100,
+      cameraBrightness: 100,
+      cameraContrast: 100,
+      cameraSharpness: 100,
     };
   }
 }
@@ -271,6 +355,390 @@ async function sendMessage(event) {
   }
 }
 
+function showTextChat() {
+  state.currentView = "text";
+  state.activeVoiceRoom = null;
+  elements.messages.classList.remove("hidden");
+  elements.messageForm.classList.remove("hidden");
+  elements.voiceStage.classList.add("hidden");
+  elements.activeChannelIcon.textContent = "#";
+  elements.activeChannelName.textContent = "global";
+  elements.memberHeading.textContent = "Online";
+  elements.roomStatus.textContent = `${state.messages.length} global messages`;
+  document.querySelectorAll(".channel").forEach((button) => button.classList.remove("active"));
+  elements.globalTextButton.classList.add("active");
+  renderMembers();
+  stopLocalMedia();
+}
+
+async function joinOfficialVoiceRoom(roomKey) {
+  await leaveCurrentVoiceRoom(false);
+  const room = officialVoiceRooms[roomKey];
+  const roomRef = doc(db, "voiceRooms", room.id);
+  await setDoc(
+    roomRef,
+    {
+      ...room,
+      isPrivate: true,
+      hostUid: currentUser.uid,
+      hostName: "GlobalChat",
+      participants: arrayUnion(currentUser.uid),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
+  const snapshot = await getDoc(roomRef);
+  state.activeVoiceRoom = {
+    id: room.id,
+    ...room,
+    ...snapshot.data(),
+    isPrivate: false,
+  };
+  renderVoiceRoom();
+  await startAudio();
+}
+
+function generateRoomCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+}
+
+async function createVoiceRoom(event) {
+  event.preventDefault();
+  if (!currentUser) return;
+  const profile = getUserProfile(currentUser.uid);
+  const room = {
+    name: elements.newRoomName.value.trim(),
+    code: generateRoomCode(),
+    isPrivate: elements.newRoomPrivate.checked,
+    hostUid: currentUser.uid,
+    hostName: profile.displayName,
+    participants: [currentUser.uid],
+    type: "unofficial",
+    startedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  const created = await addDoc(collection(db, "voiceRooms"), room);
+  elements.createRoomForm.reset();
+  elements.createRoomDialog.close();
+  await joinUnofficialVoiceRoom(created.id);
+}
+
+async function joinUnofficialVoiceRoom(roomId) {
+  await leaveCurrentVoiceRoom(false);
+  const roomRef = doc(db, "voiceRooms", roomId);
+  const snapshot = await getDoc(roomRef);
+  if (!snapshot.exists()) {
+    alert("That voice server no longer exists.");
+    return;
+  }
+  await updateDoc(roomRef, {
+    participants: arrayUnion(currentUser.uid),
+    updatedAt: serverTimestamp(),
+  });
+  state.activeVoiceRoom = { id: snapshot.id, ...snapshot.data(), participants: [...(snapshot.data().participants || []), currentUser.uid] };
+  renderVoiceRoom();
+  await startAudio();
+}
+
+async function joinRoomByCode(event) {
+  event.preventDefault();
+  const code = elements.joinCodeInput.value.trim().toUpperCase();
+  if (!code) return;
+  const roomQuery = query(collection(db, "voiceRooms"), where("code", "==", code), limit(1));
+  const snapshot = await getDocs(roomQuery);
+  if (snapshot.empty) {
+    alert("No server found with that code.");
+    return;
+  }
+  elements.joinRoomDialog.close();
+  await joinUnofficialVoiceRoom(snapshot.docs[0].id);
+}
+
+async function leaveCurrentVoiceRoom(showText = true) {
+  const room = state.activeVoiceRoom;
+  if (room?.type === "official" && currentUser) {
+    await updateDoc(doc(db, "voiceRooms", room.id), {
+      participants: arrayRemove(currentUser.uid),
+      updatedAt: serverTimestamp(),
+    }).catch(() => {});
+  }
+  if (room?.type === "unofficial" && currentUser) {
+    const participants = (room.participants || []).filter((uid) => uid !== currentUser.uid);
+    const roomRef = doc(db, "voiceRooms", room.id);
+    if (participants.length === 0) {
+      await deleteDoc(roomRef).catch(() => updateDoc(roomRef, { participants: arrayRemove(currentUser.uid) }));
+    } else {
+      await updateDoc(roomRef, {
+        participants: arrayRemove(currentUser.uid),
+        updatedAt: serverTimestamp(),
+      });
+    }
+  }
+  state.activeVoiceRoom = null;
+  stopLocalMedia();
+  if (showText) showTextChat();
+}
+
+async function renameActiveRoom() {
+  const room = state.activeVoiceRoom;
+  if (!room || room.type !== "unofficial" || room.hostUid !== currentUser?.uid) return;
+  const name = elements.hostRoomNameInput.value.trim();
+  if (!name) return;
+  await updateDoc(doc(db, "voiceRooms", room.id), {
+    name,
+    updatedAt: serverTimestamp(),
+  });
+  state.activeVoiceRoom.name = name;
+  renderVoiceRoom();
+}
+
+function subscribeToVoiceRooms() {
+  unsubscribeVoiceRooms?.();
+  const roomQuery = query(collection(db, "voiceRooms"), orderBy("startedAt", "desc"), limit(80));
+  unsubscribeVoiceRooms = onSnapshot(roomQuery, (snapshot) => {
+    state.voiceRooms = snapshot.docs.map((roomDoc) => ({ id: roomDoc.id, ...roomDoc.data() }));
+    if (state.activeVoiceRoom?.type === "unofficial") {
+      const freshRoom = state.voiceRooms.find((room) => room.id === state.activeVoiceRoom.id);
+      if (freshRoom) {
+        state.activeVoiceRoom = freshRoom;
+      } else {
+        leaveCurrentVoiceRoom(true);
+      }
+      renderVoiceRoom();
+    }
+    renderPublicRooms();
+  });
+}
+
+function renderVoiceRoom() {
+  const room = state.activeVoiceRoom;
+  if (!room) return;
+  state.currentView = "voice";
+  elements.messages.classList.add("hidden");
+  elements.messageForm.classList.add("hidden");
+  elements.voiceStage.classList.remove("hidden");
+  elements.activeChannelIcon.textContent = "🔊";
+  elements.activeChannelName.textContent = room.name;
+  elements.voiceRoomType.textContent = room.type === "official" ? "Official voice" : room.isPrivate ? "Private voice" : "Public voice";
+  elements.voiceRoomName.textContent = room.name;
+  elements.voiceRoomCode.textContent = room.code || "OFFICIAL";
+  elements.voiceRoomCodeBox.classList.toggle("hidden", room.type === "official");
+  elements.voiceRoomMeta.textContent =
+    room.type === "official"
+      ? "Official GlobalChat voice server."
+      : `Hosted by ${room.hostName || "Unknown"} • Started ${formatStartedAt(room.startedAt)}`;
+  elements.hostTools.classList.toggle("hidden", room.type !== "unofficial" || room.hostUid !== currentUser?.uid);
+  elements.hostRoomNameInput.value = room.name;
+  elements.roomStatus.textContent = room.type === "official" ? "Official voice server" : `Join code ${room.code}`;
+  elements.memberHeading.textContent = "In voice";
+
+  document.querySelectorAll(".channel").forEach((button) => button.classList.remove("active"));
+  const officialKey = Object.keys(officialVoiceRooms).find((key) => officialVoiceRooms[key].id === room.id);
+  if (officialKey) {
+    document.querySelector(`[data-official-room="${officialKey}"]`)?.classList.add("active");
+  }
+  renderVoiceMembers();
+}
+
+function renderVoiceMembers() {
+  const room = state.activeVoiceRoom;
+  const participantIds = room?.participants || [currentUser?.uid].filter(Boolean);
+  elements.memberList.innerHTML = participantIds
+    .map((uid) => {
+      const user = getUserProfile(uid);
+      return `
+        <div class="member">
+          <img src="${escapeHtml(user.avatar || defaultAvatar)}" alt="" />
+          <strong>${escapeHtml(user.displayName || "Global user")}</strong>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function renderPublicRooms() {
+  const pageSize = 5;
+  const publicRooms = state.voiceRooms.filter((room) => room.type === "unofficial" && !room.isPrivate);
+  const pageCount = Math.max(1, Math.ceil(publicRooms.length / pageSize));
+  state.roomPage = Math.min(state.roomPage, pageCount - 1);
+  const pageRooms = publicRooms.slice(state.roomPage * pageSize, state.roomPage * pageSize + pageSize);
+  elements.roomPageLabel.textContent = `Page ${state.roomPage + 1} of ${pageCount}`;
+  elements.prevRoomsButton.disabled = state.roomPage === 0;
+  elements.nextRoomsButton.disabled = state.roomPage >= pageCount - 1;
+  elements.publicRoomList.innerHTML =
+    pageRooms
+      .map(
+        (room) => `
+          <div class="public-room">
+            <div>
+              <strong>${escapeHtml(room.name)}</strong>
+              <span>Host: ${escapeHtml(room.hostName || "Unknown")} • Started ${formatStartedAt(room.startedAt)}</span>
+            </div>
+            <button class="secondary-button" type="button" data-join-room="${escapeHtml(room.id)}">Join</button>
+          </div>
+        `,
+      )
+      .join("") || `<p class="empty-state">No public unofficial voice servers right now.</p>`;
+}
+
+function formatStartedAt(value) {
+  const date = value?.toDate ? value.toDate() : null;
+  if (!date) return "just now";
+  return formatTime(date);
+}
+
+async function loadDevices() {
+  if (!navigator.mediaDevices?.enumerateDevices) return;
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    fillDeviceSelect(elements.audioInputSelect, devices.filter((device) => device.kind === "audioinput"), "Default microphone");
+    fillDeviceSelect(elements.audioOutputSelect, devices.filter((device) => device.kind === "audiooutput"), "Default speaker");
+    fillDeviceSelect(elements.cameraSelect, devices.filter((device) => device.kind === "videoinput"), "Default camera");
+  } catch (error) {
+    console.warn(error);
+  }
+}
+
+function fillDeviceSelect(select, devices, fallbackLabel) {
+  const currentValue = select.value;
+  select.innerHTML = `<option value="">${fallbackLabel}</option>${devices
+    .map((device, index) => `<option value="${escapeHtml(device.deviceId)}">${escapeHtml(device.label || `${fallbackLabel} ${index + 1}`)}</option>`)
+    .join("")}`;
+  select.value = [...select.options].some((option) => option.value === currentValue) ? currentValue : "";
+}
+
+async function startAudio() {
+  stopAudio();
+  try {
+    const constraints = {
+      audio: {
+        deviceId: elements.audioInputSelect.value ? { exact: elements.audioInputSelect.value } : undefined,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    };
+    localAudioStream = await navigator.mediaDevices.getUserMedia(constraints);
+    applyMicState(true);
+    await loadDevices();
+  } catch (error) {
+    elements.micButton.textContent = "Mic blocked";
+    elements.micButton.classList.remove("active");
+  }
+}
+
+async function toggleMic() {
+  if (!localAudioStream) {
+    await startAudio();
+    return;
+  }
+  const enabled = !localAudioStream.getAudioTracks().some((track) => track.enabled);
+  applyMicState(enabled);
+}
+
+function applyMicState(enabled) {
+  localAudioStream?.getAudioTracks().forEach((track) => {
+    track.enabled = enabled;
+  });
+  elements.micButton.textContent = enabled ? "Mic on" : "Mic off";
+  elements.micButton.classList.toggle("active", enabled);
+}
+
+function stopAudio() {
+  localAudioStream?.getTracks().forEach((track) => track.stop());
+  localAudioStream = null;
+}
+
+async function toggleCamera() {
+  if (localVideoStream) {
+    stopCamera();
+    return;
+  }
+  try {
+    const constraints = {
+      video: {
+        deviceId: elements.cameraSelect.value ? { exact: elements.cameraSelect.value } : undefined,
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+    };
+    localVideoStream = await navigator.mediaDevices.getUserMedia(constraints);
+    elements.cameraPreview.srcObject = localVideoStream;
+    elements.cameraPlaceholder.classList.add("hidden");
+    elements.cameraButton.textContent = "Camera on";
+    elements.cameraButton.classList.add("active");
+    await loadDevices();
+  } catch (error) {
+    alert("Camera could not start. Check browser permission and device settings.");
+  }
+}
+
+function stopCamera() {
+  localVideoStream?.getTracks().forEach((track) => track.stop());
+  localVideoStream = null;
+  elements.cameraPreview.srcObject = null;
+  elements.cameraPlaceholder.classList.remove("hidden");
+  elements.cameraButton.textContent = "Camera off";
+  elements.cameraButton.classList.remove("active");
+}
+
+async function toggleScreenShare() {
+  if (screenStream) {
+    stopScreenShare();
+    return;
+  }
+  try {
+    screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    elements.screenPreview.srcObject = screenStream;
+    elements.screenPlaceholder.classList.add("hidden");
+    elements.screenShareButton.textContent = "Stop sharing";
+    elements.screenShareButton.classList.add("active");
+    screenStream.getVideoTracks()[0]?.addEventListener("ended", stopScreenShare);
+  } catch (error) {
+    alert("Screen sharing was cancelled or blocked.");
+  }
+}
+
+function stopScreenShare() {
+  screenStream?.getTracks().forEach((track) => track.stop());
+  screenStream = null;
+  elements.screenPreview.srcObject = null;
+  elements.screenPlaceholder.classList.remove("hidden");
+  elements.screenShareButton.textContent = "Share screen beta";
+  elements.screenShareButton.classList.remove("active");
+}
+
+function stopLocalMedia() {
+  stopAudio();
+  stopCamera();
+  stopScreenShare();
+}
+
+function applyMediaSettings() {
+  const settings = state.settings;
+  elements.micVolume.value = settings.micVolume;
+  elements.speakerVolume.value = settings.speakerVolume;
+  elements.cameraSaturation.value = settings.cameraSaturation;
+  elements.cameraBrightness.value = settings.cameraBrightness;
+  elements.cameraContrast.value = settings.cameraContrast;
+  elements.cameraSharpness.value = settings.cameraSharpness;
+  elements.micVolumeValue.textContent = `${settings.micVolume}%`;
+  elements.speakerVolumeValue.textContent = `${settings.speakerVolume}%`;
+  elements.cameraSaturationValue.textContent = `${settings.cameraSaturation}%`;
+  elements.cameraBrightnessValue.textContent = `${settings.cameraBrightness}%`;
+  elements.cameraContrastValue.textContent = `${settings.cameraContrast}%`;
+  elements.cameraSharpnessValue.textContent = `${settings.cameraSharpness}%`;
+  elements.cameraPreview.style.filter = `saturate(${settings.cameraSaturation}%) brightness(${settings.cameraBrightness}%) contrast(${settings.cameraContrast}%)`;
+  elements.cameraPreview.style.imageRendering = settings.cameraSharpness > 120 ? "crisp-edges" : "auto";
+}
+
+function updateMediaSetting(key, value) {
+  state.settings[key] = Number(value);
+  saveSettings();
+  applyMediaSettings();
+}
+
 function subscribeToMessages() {
   unsubscribeMessages?.();
   const messagesQuery = query(collection(db, "messages"), orderBy("createdAt", "asc"), limit(200));
@@ -382,6 +850,10 @@ function renderCurrentUser() {
 }
 
 function renderMembers() {
+  if (state.currentView === "voice") {
+    renderVoiceMembers();
+    return;
+  }
   const members = [...state.users.values()].sort((a, b) => (a.displayName || "").localeCompare(b.displayName || ""));
   elements.memberList.innerHTML = members
     .map(
@@ -422,13 +894,16 @@ function setSettingsTab(tab) {
   const titles = {
     profile: "Profile",
     notifications: "Notifications",
+    audio: "Audio & Video",
     account: "Account",
   };
   elements.settingsTitle.textContent = titles[tab];
   elements.settingsTabs.forEach((button) => button.classList.toggle("active", button.dataset.settingsTab === tab));
   elements.profileSettings.classList.toggle("hidden", tab !== "profile");
   elements.notificationSettings.classList.toggle("hidden", tab !== "notifications");
+  elements.audioSettings.classList.toggle("hidden", tab !== "audio");
   elements.accountSettings.classList.toggle("hidden", tab !== "account");
+  if (tab === "audio") loadDevices();
 }
 
 async function resizeImage(file) {
@@ -494,9 +969,11 @@ function renderSettings() {
   elements.soundNotifications.checked = state.settings.soundNotifications;
   elements.soundVolume.value = state.settings.soundVolume;
   elements.soundQuickButton.textContent = state.settings.soundNotifications ? "Sound on" : "Sound off";
+  applyMediaSettings();
 }
 
 async function logOut() {
+  await leaveCurrentVoiceRoom(false);
   await firebaseSignOut(auth);
   elements.settingsDialog.close();
 }
@@ -505,12 +982,16 @@ function showSignedOut() {
   currentUser = null;
   unsubscribeMessages?.();
   unsubscribeUsers?.();
+  unsubscribeVoiceRooms?.();
   unsubscribeMessages = null;
   unsubscribeUsers = null;
+  unsubscribeVoiceRooms = null;
   messagesLoaded = false;
   latestMessageId = null;
   state.messages = [];
   state.users = new Map();
+  state.voiceRooms = [];
+  stopLocalMedia();
   elements.authView.classList.remove("hidden");
   elements.chatView.classList.add("hidden");
 }
@@ -523,6 +1004,8 @@ async function showSignedIn(user) {
   elements.connectionStatus.textContent = "Online";
   subscribeToUsers();
   subscribeToMessages();
+  subscribeToVoiceRooms();
+  loadDevices();
   elements.messageInput.focus();
 }
 
@@ -552,6 +1035,39 @@ elements.createForm.addEventListener("submit", createAccount);
 elements.signInForm.addEventListener("submit", signIn);
 elements.googleButton.addEventListener("click", signInGoogle);
 elements.messageForm.addEventListener("submit", sendMessage);
+elements.globalTextButton.addEventListener("click", showTextChat);
+document.querySelectorAll("[data-official-room]").forEach((button) => {
+  button.addEventListener("click", () => joinOfficialVoiceRoom(button.dataset.officialRoom));
+});
+elements.createVoiceRoomButton.addEventListener("click", () => elements.createRoomDialog.showModal());
+elements.joinVoiceRoomButton.addEventListener("click", () => {
+  renderPublicRooms();
+  elements.joinRoomDialog.showModal();
+});
+elements.createRoomForm.addEventListener("submit", createVoiceRoom);
+elements.joinCodeForm.addEventListener("submit", joinRoomByCode);
+elements.publicRoomList.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-join-room]");
+  if (!button) return;
+  elements.joinRoomDialog.close();
+  joinUnofficialVoiceRoom(button.dataset.joinRoom);
+});
+elements.prevRoomsButton.addEventListener("click", () => {
+  state.roomPage = Math.max(0, state.roomPage - 1);
+  renderPublicRooms();
+});
+elements.nextRoomsButton.addEventListener("click", () => {
+  state.roomPage += 1;
+  renderPublicRooms();
+});
+document.querySelectorAll("[data-close-dialog]").forEach((button) => {
+  button.addEventListener("click", () => document.querySelector(`#${button.dataset.closeDialog}`).close());
+});
+elements.renameRoomButton.addEventListener("click", renameActiveRoom);
+elements.micButton.addEventListener("click", toggleMic);
+elements.cameraButton.addEventListener("click", toggleCamera);
+elements.screenShareButton.addEventListener("click", toggleScreenShare);
+elements.leaveVoiceButton.addEventListener("click", () => leaveCurrentVoiceRoom(true));
 elements.settingsButton.addEventListener("click", () => openSettings("profile"));
 elements.settingsRailButton.addEventListener("click", () => openSettings("profile"));
 elements.closeSettingsButton.addEventListener("click", () => elements.settingsDialog.close());
@@ -589,12 +1105,36 @@ elements.soundQuickButton.addEventListener("click", () => {
   renderSettings();
 });
 elements.testSoundButton.addEventListener("click", playNotificationSound);
+elements.refreshDevicesButton.addEventListener("click", loadDevices);
+elements.audioInputSelect.addEventListener("change", () => {
+  if (localAudioStream) startAudio();
+});
+elements.cameraSelect.addEventListener("change", () => {
+  if (localVideoStream) {
+    stopCamera();
+    toggleCamera();
+  }
+});
+elements.audioOutputSelect.addEventListener("change", () => {
+  if ("setSinkId" in HTMLMediaElement.prototype) {
+    elements.screenPreview.setSinkId?.(elements.audioOutputSelect.value).catch(() => {});
+  }
+});
+elements.micVolume.addEventListener("input", () => updateMediaSetting("micVolume", elements.micVolume.value));
+elements.speakerVolume.addEventListener("input", () => updateMediaSetting("speakerVolume", elements.speakerVolume.value));
+elements.cameraSaturation.addEventListener("input", () => updateMediaSetting("cameraSaturation", elements.cameraSaturation.value));
+elements.cameraBrightness.addEventListener("input", () => updateMediaSetting("cameraBrightness", elements.cameraBrightness.value));
+elements.cameraContrast.addEventListener("input", () => updateMediaSetting("cameraContrast", elements.cameraContrast.value));
+elements.cameraSharpness.addEventListener("input", () => updateMediaSetting("cameraSharpness", elements.cameraSharpness.value));
 elements.clearLocalButton.addEventListener("click", () => {
   localStorage.removeItem(localSettingsKey);
   state.settings = readSettings();
   renderSettings();
 });
 elements.signOutButton.addEventListener("click", logOut);
+window.addEventListener("pagehide", () => {
+  leaveCurrentVoiceRoom(false);
+});
 
 renderSettings();
 initFirebase();
