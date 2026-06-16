@@ -164,6 +164,7 @@ const elements = {
 let auth = null;
 let db = null;
 let storage = null;
+let firebaseReady = false;
 let currentUser = null;
 let unsubscribeMessages = null;
 let unsubscribeUsers = null;
@@ -198,6 +199,10 @@ function hasFirebaseConfig() {
       activeFirebaseConfig.projectId &&
       activeFirebaseConfig.appId,
   );
+}
+
+function isMediaFile(file) {
+  return Boolean(file && (file.type.startsWith("image/") || file.type.startsWith("video/")));
 }
 
 function readSettings() {
