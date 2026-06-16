@@ -40,14 +40,7 @@
             </label>
             <label>
               Password
-              <input
-                id="signInPassword"
-                name="password"
-                type="password"
-                autocomplete="current-password"
-                required
-                minlength="6"
-              />
+              <input id="signInPassword" name="password" type="password" autocomplete="current-password" required minlength="6" />
             </label>
             <button class="primary-button" id="signInSubmit" type="submit">Sign in</button>
           </form>
@@ -59,14 +52,7 @@
             </label>
             <label>
               Password
-              <input
-                id="createPassword"
-                name="new-password"
-                type="password"
-                autocomplete="new-password"
-                required
-                minlength="6"
-              />
+              <input id="createPassword" name="new-password" type="password" autocomplete="new-password" required minlength="6" />
             </label>
             <button class="primary-button" id="createSubmit" type="submit">Create account</button>
           </form>
@@ -90,12 +76,25 @@
 
         <aside class="channel-sidebar" aria-label="Channels">
           <div class="server-title">GlobalChat</div>
+
           <div class="channel-group">
             <div class="channel-heading">Text channels</div>
-            <button class="channel active" type="button"><span>#</span> global</button>
-            <button class="channel" type="button"><span>#</span> introductions</button>
-            <button class="channel" type="button"><span>#</span> random</button>
+            <button class="channel active" id="globalTextButton" type="button"><span>#</span> global</button>
           </div>
+
+          <div class="channel-group">
+            <div class="channel-heading">Official voice</div>
+            <button class="channel voice-channel" type="button" data-official-room="lounge"><span>🔊</span> Lounge</button>
+            <button class="channel voice-channel" type="button" data-official-room="gaming"><span>🔊</span> Gaming</button>
+            <button class="channel voice-channel" type="button" data-official-room="study"><span>🔊</span> Study</button>
+          </div>
+
+          <div class="channel-group">
+            <div class="channel-heading">Unofficial voice</div>
+            <button class="channel" id="createVoiceRoomButton" type="button"><span>＋</span> Create server</button>
+            <button class="channel" id="joinVoiceRoomButton" type="button"><span>⌕</span> Join other servers</button>
+          </div>
+
           <div class="user-bar">
             <img id="currentAvatar" alt="" />
             <div class="user-bar-name">
@@ -109,9 +108,9 @@
         <section class="chat-panel">
           <header class="chat-header">
             <div class="channel-title">
-              <span>#</span>
+              <span id="activeChannelIcon">#</span>
               <div>
-                <h2>global</h2>
+                <h2 id="activeChannelName">global</h2>
                 <p id="roomStatus">Live public chat</p>
               </div>
             </div>
@@ -120,15 +119,59 @@
 
           <div class="messages" id="messages" aria-live="polite"></div>
 
+          <section class="voice-stage hidden" id="voiceStage" aria-label="Voice chat">
+            <div class="voice-hero">
+              <div>
+                <span class="voice-kicker" id="voiceRoomType">Official voice</span>
+                <h3 id="voiceRoomName">Lounge</h3>
+                <p id="voiceRoomMeta">Connect your mic or camera to start.</p>
+              </div>
+              <div class="voice-code" id="voiceRoomCodeBox">
+                <span>Code</span>
+                <strong id="voiceRoomCode">OFFICIAL</strong>
+              </div>
+            </div>
+
+            <div class="host-tools hidden" id="hostTools">
+              <input id="hostRoomNameInput" maxlength="34" />
+              <button class="secondary-button" id="renameRoomButton" type="button">Rename server</button>
+            </div>
+
+            <div class="video-grid">
+              <div class="video-tile">
+                <video id="cameraPreview" autoplay muted playsinline></video>
+                <div class="video-placeholder" id="cameraPlaceholder">Camera off</div>
+                <span id="localMediaLabel">You</span>
+              </div>
+              <div class="video-tile beta">
+                <video id="screenPreview" autoplay muted playsinline></video>
+                <div class="video-placeholder" id="screenPlaceholder">Screen share beta</div>
+                <span>Screen</span>
+              </div>
+            </div>
+
+            <div class="voice-controls">
+              <button class="control-button active" id="micButton" type="button">Mic on</button>
+              <button class="control-button" id="cameraButton" type="button">Camera off</button>
+              <button class="control-button beta" id="screenShareButton" type="button">Share screen beta</button>
+              <button class="danger-button" id="leaveVoiceButton" type="button">Leave voice</button>
+            </div>
+            <p class="voice-note">
+              Voice room membership is global. Live audio/video between users needs WebRTC signaling; these controls prepare local devices.
+            </p>
+          </section>
+
           <form class="message-form" id="messageForm">
-            <button class="attach-button" type="button" aria-label="Add attachment">+</button>
-            <input id="messageInput" autocomplete="off" maxlength="500" placeholder="Message #global" required />
+            <button class="attach-button" id="attachButton" type="button" aria-label="Add attachment">+</button>
+            <input id="mediaInput" type="file" accept="image/*,image/gif,video/*" />
+            <input id="messageInput" autocomplete="off" maxlength="500" placeholder="Message #global" />
             <button class="send-button" type="submit" aria-label="Send message">➜</button>
           </form>
+          <div class="upload-status hidden" id="uploadStatus">Uploading...</div>
         </section>
 
         <aside class="member-sidebar" aria-label="Members">
-          <div class="member-heading">Online</div>
+          <div class="member-heading" id="memberHeading">Online</div>
           <div class="member-list" id="memberList"></div>
         </aside>
       </section>
@@ -139,6 +182,7 @@
             <h2>Settings</h2>
             <button class="settings-tab active" type="button" data-settings-tab="profile">Profile</button>
             <button class="settings-tab" type="button" data-settings-tab="notifications">Notifications</button>
+            <button class="settings-tab" type="button" data-settings-tab="audio">Audio & Video</button>
             <button class="settings-tab" type="button" data-settings-tab="account">Account</button>
           </div>
 
@@ -192,6 +236,46 @@
               <button class="secondary-button" id="testSoundButton" type="button">Test sound</button>
             </section>
 
+            <section class="settings-section hidden" id="audioSettings">
+              <label>
+                Input device
+                <select id="audioInputSelect"></select>
+              </label>
+              <label>
+                Output device
+                <select id="audioOutputSelect"></select>
+              </label>
+              <label>
+                Mic volume: <span id="micVolumeValue">100%</span>
+                <input id="micVolume" type="range" min="0" max="200" step="5" />
+              </label>
+              <label>
+                Speaker volume: <span id="speakerVolumeValue">100%</span>
+                <input id="speakerVolume" type="range" min="0" max="200" step="5" />
+              </label>
+              <label>
+                Camera device
+                <select id="cameraSelect"></select>
+              </label>
+              <label>
+                Saturation: <span id="cameraSaturationValue">100%</span>
+                <input id="cameraSaturation" type="range" min="0" max="200" step="5" />
+              </label>
+              <label>
+                Brightness: <span id="cameraBrightnessValue">100%</span>
+                <input id="cameraBrightness" type="range" min="50" max="150" step="5" />
+              </label>
+              <label>
+                Contrast: <span id="cameraContrastValue">100%</span>
+                <input id="cameraContrast" type="range" min="50" max="150" step="5" />
+              </label>
+              <label>
+                Sharpness: <span id="cameraSharpnessValue">100%</span>
+                <input id="cameraSharpness" type="range" min="0" max="200" step="5" />
+              </label>
+              <button class="secondary-button" id="refreshDevicesButton" type="button">Refresh devices</button>
+            </section>
+
             <section class="settings-section hidden" id="accountSettings">
               <div class="account-box">
                 <strong id="accountName"></strong>
@@ -202,6 +286,46 @@
             </section>
           </div>
         </form>
+      </dialog>
+
+      <dialog class="room-dialog" id="createRoomDialog">
+        <form class="room-form" id="createRoomForm">
+          <div class="settings-header">
+            <h3>Create voice server</h3>
+            <button class="close-button" type="button" data-close-dialog="createRoomDialog" aria-label="Close">×</button>
+          </div>
+          <label>
+            Server name
+            <input id="newRoomName" maxlength="34" required placeholder="Movie night" />
+          </label>
+          <label class="switch-row">
+            <span>
+              Private server
+              <small>Private servers are hidden from Join other servers and need a code.</small>
+            </span>
+            <input id="newRoomPrivate" type="checkbox" />
+          </label>
+          <button class="primary-button" type="submit">Create and join</button>
+        </form>
+      </dialog>
+
+      <dialog class="room-dialog" id="joinRoomDialog">
+        <div class="room-form">
+          <div class="settings-header">
+            <h3>Join other servers</h3>
+            <button class="close-button" type="button" data-close-dialog="joinRoomDialog" aria-label="Close">×</button>
+          </div>
+          <form class="join-code-row" id="joinCodeForm">
+            <input id="joinCodeInput" maxlength="10" placeholder="Enter code" />
+            <button class="primary-button" type="submit">Join</button>
+          </form>
+          <div class="public-room-list" id="publicRoomList"></div>
+          <div class="pager">
+            <button class="secondary-button" id="prevRoomsButton" type="button">Previous</button>
+            <span id="roomPageLabel">Page 1</span>
+            <button class="secondary-button" id="nextRoomsButton" type="button">Next</button>
+          </div>
+        </div>
       </dialog>
     </main>
 

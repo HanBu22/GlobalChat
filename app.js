@@ -2,8 +2,10 @@ import { firebaseConfig } from "./firebase-config.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import {
   GoogleAuthProvider,
+  browserLocalPersistence,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  setPersistence,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut as firebaseSignOut,
@@ -29,12 +31,34 @@ import {
   updateDoc,
   where,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import {
+  getDownloadURL,
+  getStorage,
+  ref,
+  uploadBytesResumable,
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js";
+
+const fallbackFirebaseConfig = {
+  apiKey: "AIzaSyD3B_HRjIGV4PhXwZYSpkExNRwaaIWKplA",
+  authDomain: "globalchat-346a6.firebaseapp.com",
+  projectId: "globalchat-346a6",
+  storageBucket: "globalchat-346a6.firebasestorage.app",
+  messagingSenderId: "277742559072",
+  appId: "1:277742559072:web:0653743d75a5aee6434805",
+  measurementId: "G-K28X6MCVNB",
+};
+
+const activeFirebaseConfig = {
+  ...fallbackFirebaseConfig,
+  ...Object.fromEntries(Object.entries(firebaseConfig).filter(([, value]) => Boolean(value))),
+};
 
 const defaultAvatar =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Crect width='128' height='128' fill='%235865f2'/%3E%3Ccircle cx='64' cy='48' r='26' fill='%23f2f3f5'/%3E%3Cpath d='M22 118c6-28 25-43 42-43s36 15 42 43' fill='%23f2f3f5'/%3E%3C/svg%3E";
 
 const localSettingsKey = "globalchat.settings";
 const usernameDomain = "globalchat.app";
+const maxMediaSize = 250 * 1024 * 1024;
 
 const elements = {
   authView: document.querySelector("#authView"),
@@ -51,6 +75,9 @@ const elements = {
   messages: document.querySelector("#messages"),
   messageForm: document.querySelector("#messageForm"),
   messageInput: document.querySelector("#messageInput"),
+  mediaInput: document.querySelector("#mediaInput"),
+  attachButton: document.querySelector("#attachButton"),
+  uploadStatus: document.querySelector("#uploadStatus"),
   currentAvatar: document.querySelector("#currentAvatar"),
   currentName: document.querySelector("#currentName"),
   connectionStatus: document.querySelector("#connectionStatus"),
@@ -136,6 +163,7 @@ const elements = {
 
 let auth = null;
 let db = null;
+let storage = null;
 let currentUser = null;
 let unsubscribeMessages = null;
 let unsubscribeUsers = null;
@@ -164,7 +192,12 @@ const officialVoiceRooms = {
 };
 
 function hasFirebaseConfig() {
-  return Boolean(firebaseConfig.apiKey && firebaseConfig.authDomain && firebaseConfig.projectId && firebaseConfig.appId);
+  return Boolean(
+    activeFirebaseConfig.apiKey &&
+      activeFirebaseConfig.authDomain &&
+      activeFirebaseConfig.projectId &&
+      activeFirebaseConfig.appId,
+  );
 }
 
 function readSettings() {
