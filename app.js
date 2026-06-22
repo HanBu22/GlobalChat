@@ -145,15 +145,21 @@ const elements = {
   audioSettings: document.querySelector("#audioSettings"),
   audioInputSelect: document.querySelector("#audioInputSelect"),
   audioOutputSelect: document.querySelector("#audioOutputSelect"),
+  voiceAudioInputSelect: document.querySelector("#voiceAudioInputSelect"),
+  voiceAudioOutputSelect: document.querySelector("#voiceAudioOutputSelect"),
   cameraSelect: document.querySelector("#cameraSelect"),
   micVolume: document.querySelector("#micVolume"),
   speakerVolume: document.querySelector("#speakerVolume"),
+  voiceMicVolume: document.querySelector("#voiceMicVolume"),
+  voiceSpeakerVolume: document.querySelector("#voiceSpeakerVolume"),
   cameraSaturation: document.querySelector("#cameraSaturation"),
   cameraBrightness: document.querySelector("#cameraBrightness"),
   cameraContrast: document.querySelector("#cameraContrast"),
   cameraSharpness: document.querySelector("#cameraSharpness"),
   micVolumeValue: document.querySelector("#micVolumeValue"),
   speakerVolumeValue: document.querySelector("#speakerVolumeValue"),
+  voiceMicVolumeValue: document.querySelector("#voiceMicVolumeValue"),
+  voiceSpeakerVolumeValue: document.querySelector("#voiceSpeakerVolumeValue"),
   cameraSaturationValue: document.querySelector("#cameraSaturationValue"),
   cameraBrightnessValue: document.querySelector("#cameraBrightnessValue"),
   cameraContrastValue: document.querySelector("#cameraContrastValue"),
@@ -692,8 +698,12 @@ async function loadDevices() {
   if (!navigator.mediaDevices?.enumerateDevices) return;
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
-    fillDeviceSelect(elements.audioInputSelect, devices.filter((device) => device.kind === "audioinput"), "Default microphone");
-    fillDeviceSelect(elements.audioOutputSelect, devices.filter((device) => device.kind === "audiooutput"), "Default speaker");
+    const audioInputs = devices.filter((device) => device.kind === "audioinput");
+    const audioOutputs = devices.filter((device) => device.kind === "audiooutput");
+    fillDeviceSelect(elements.audioInputSelect, audioInputs, "Default microphone");
+    fillDeviceSelect(elements.voiceAudioInputSelect, audioInputs, "Default microphone");
+    fillDeviceSelect(elements.audioOutputSelect, audioOutputs, "Default speaker");
+    fillDeviceSelect(elements.voiceAudioOutputSelect, audioOutputs, "Default speaker");
     fillDeviceSelect(elements.cameraSelect, devices.filter((device) => device.kind === "videoinput"), "Default camera");
   } catch (error) {
     console.warn(error);
@@ -713,7 +723,7 @@ async function startAudio() {
   try {
     const constraints = {
       audio: {
-        deviceId: elements.audioInputSelect.value ? { exact: elements.audioInputSelect.value } : undefined,
+        deviceId: getAudioInputDeviceId() ? { exact: getAudioInputDeviceId() } : undefined,
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
@@ -819,24 +829,37 @@ function applyMediaSettings() {
   const settings = state.settings;
   elements.micVolume.value = settings.micVolume;
   elements.speakerVolume.value = settings.speakerVolume;
+  elements.voiceMicVolume.value = settings.micVolume;
+  elements.voiceSpeakerVolume.value = settings.speakerVolume;
   elements.cameraSaturation.value = settings.cameraSaturation;
   elements.cameraBrightness.value = settings.cameraBrightness;
   elements.cameraContrast.value = settings.cameraContrast;
   elements.cameraSharpness.value = settings.cameraSharpness;
   elements.micVolumeValue.textContent = `${settings.micVolume}%`;
   elements.speakerVolumeValue.textContent = `${settings.speakerVolume}%`;
+  elements.voiceMicVolumeValue.textContent = `${settings.micVolume}%`;
+  elements.voiceSpeakerVolumeValue.textContent = `${settings.speakerVolume}%`;
   elements.cameraSaturationValue.textContent = `${settings.cameraSaturation}%`;
   elements.cameraBrightnessValue.textContent = `${settings.cameraBrightness}%`;
   elements.cameraContrastValue.textContent = `${settings.cameraContrast}%`;
   elements.cameraSharpnessValue.textContent = `${settings.cameraSharpness}%`;
   elements.cameraPreview.style.filter = `saturate(${settings.cameraSaturation}%) brightness(${settings.cameraBrightness}%) contrast(${settings.cameraContrast}%)`;
   elements.cameraPreview.style.imageRendering = settings.cameraSharpness > 120 ? "crisp-edges" : "auto";
+  elements.screenPreview.volume = Math.min(1, settings.speakerVolume / 100);
 }
 
 function updateMediaSetting(key, value) {
   state.settings[key] = Number(value);
   saveSettings();
   applyMediaSettings();
+}
+
+function getAudioInputDeviceId() {
+  return elements.voiceAudioInputSelect.value || elements.audioInputSelect.value;
+}
+
+function syncAudioDeviceSelects(source, target) {
+  target.value = source.value;
 }
 
 function subscribeToMessages() {
@@ -1255,6 +1278,11 @@ elements.soundQuickButton.addEventListener("click", () => {
 elements.testSoundButton.addEventListener("click", playNotificationSound);
 elements.refreshDevicesButton.addEventListener("click", loadDevices);
 elements.audioInputSelect.addEventListener("change", () => {
+  syncAudioDeviceSelects(elements.audioInputSelect, elements.voiceAudioInputSelect);
+  if (localAudioStream) startAudio();
+});
+elements.voiceAudioInputSelect.addEventListener("change", () => {
+  syncAudioDeviceSelects(elements.voiceAudioInputSelect, elements.audioInputSelect);
   if (localAudioStream) startAudio();
 });
 elements.cameraSelect.addEventListener("change", () => {
@@ -1264,12 +1292,21 @@ elements.cameraSelect.addEventListener("change", () => {
   }
 });
 elements.audioOutputSelect.addEventListener("change", () => {
+  syncAudioDeviceSelects(elements.audioOutputSelect, elements.voiceAudioOutputSelect);
   if ("setSinkId" in HTMLMediaElement.prototype) {
     elements.screenPreview.setSinkId?.(elements.audioOutputSelect.value).catch(() => {});
   }
 });
+elements.voiceAudioOutputSelect.addEventListener("change", () => {
+  syncAudioDeviceSelects(elements.voiceAudioOutputSelect, elements.audioOutputSelect);
+  if ("setSinkId" in HTMLMediaElement.prototype) {
+    elements.screenPreview.setSinkId?.(elements.voiceAudioOutputSelect.value).catch(() => {});
+  }
+});
 elements.micVolume.addEventListener("input", () => updateMediaSetting("micVolume", elements.micVolume.value));
 elements.speakerVolume.addEventListener("input", () => updateMediaSetting("speakerVolume", elements.speakerVolume.value));
+elements.voiceMicVolume.addEventListener("input", () => updateMediaSetting("micVolume", elements.voiceMicVolume.value));
+elements.voiceSpeakerVolume.addEventListener("input", () => updateMediaSetting("speakerVolume", elements.voiceSpeakerVolume.value));
 elements.cameraSaturation.addEventListener("input", () => updateMediaSetting("cameraSaturation", elements.cameraSaturation.value));
 elements.cameraBrightness.addEventListener("input", () => updateMediaSetting("cameraBrightness", elements.cameraBrightness.value));
 elements.cameraContrast.addEventListener("input", () => updateMediaSetting("cameraContrast", elements.cameraContrast.value));

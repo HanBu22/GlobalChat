@@ -156,6 +156,29 @@
               <button class="control-button beta" id="screenShareButton" type="button">Share screen beta</button>
               <button class="danger-button" id="leaveVoiceButton" type="button">Leave voice</button>
             </div>
+
+            <div class="voice-audio-panel" aria-label="Voice audio settings">
+              <div class="voice-audio-row">
+                <label>
+                  Mic volume <span id="voiceMicVolumeValue">100%</span>
+                  <input id="voiceMicVolume" type="range" min="0" max="200" step="5" />
+                </label>
+                <label>
+                  Output volume <span id="voiceSpeakerVolumeValue">100%</span>
+                  <input id="voiceSpeakerVolume" type="range" min="0" max="200" step="5" />
+                </label>
+              </div>
+              <div class="voice-device-row">
+                <label>
+                  Input
+                  <select id="voiceAudioInputSelect"></select>
+                </label>
+                <label>
+                  Output
+                  <select id="voiceAudioOutputSelect"></select>
+                </label>
+              </div>
+            </div>
             <p class="voice-note">
               Voice room membership is global. Live audio/video between users needs WebRTC signaling; these controls prepare local devices.
             </p>
