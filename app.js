@@ -275,6 +275,9 @@ function formatError(error) {
   if (code.includes("permission-denied")) {
     return "Firestore security rules blocked this action. Paste firestore.rules into Firebase Console > Firestore Database > Rules, then publish.";
   }
+  if (code.includes("storage/unauthorized")) {
+    return "Firebase Storage rules blocked this upload. Paste storage.rules into Firebase Console > Storage > Rules, then publish.";
+  }
   return error?.message ?? "Something went wrong.";
 }
 
@@ -374,23 +377,82 @@ async function saveProfile(event) {
 async function sendMessage(event) {
   event.preventDefault();
   const text = elements.messageInput.value.trim();
-  if (!text || !currentUser || !db) return;
+  const file = elements.mediaInput.files?.[0] ?? null;
+  if ((!text && !file) || !currentUser || !db) return;
+  if (file && !isMediaFile(file)) {
+    alert("You can upload images, GIFs, and videos.");
+    return;
+  }
+  if (file && file.size > maxMediaSize) {
+    alert("File is too large. Keep uploads under 250 MB.");
+    return;
+  }
 
   const profile = getUserProfile(currentUser.uid);
+  const previousText = text;
   elements.messageInput.value = "";
+  elements.mediaInput.value = "";
+  setUploadStatus(file ? "Preparing upload..." : "");
 
   try {
-    await addDoc(collection(db, "messages"), {
+    const media = file ? await uploadMessageMedia(file) : null;
+    const message = {
       uid: currentUser.uid,
       text,
       displayName: profile.displayName,
       avatar: profile.avatar,
       createdAt: serverTimestamp(),
-    });
+    };
+    if (media) {
+      message.media = media;
+    }
+    await addDoc(collection(db, "messages"), message);
   } catch (error) {
-    elements.messageInput.value = text;
+    elements.messageInput.value = previousText;
     alert(formatError(error));
+  } finally {
+    setUploadStatus("");
   }
+}
+
+function setUploadStatus(message) {
+  elements.uploadStatus.textContent = message;
+  elements.uploadStatus.classList.toggle("hidden", !message);
+}
+
+async function uploadMessageMedia(file) {
+  if (!storage) throw new Error("Firebase Storage is not ready yet.");
+  const extension = file.name.includes(".") ? file.name.split(".").pop().toLowerCase() : "upload";
+  const mediaId = crypto.randomUUID();
+  const mediaRef = ref(storage, `message-media/${currentUser.uid}/${mediaId}.${extension}`);
+  const task = uploadBytesResumable(mediaRef, file, {
+    contentType: file.type,
+    customMetadata: {
+      uid: currentUser.uid,
+      originalName: file.name,
+    },
+  });
+
+  await new Promise((resolve, reject) => {
+    task.on(
+      "state_changed",
+      (snapshot) => {
+        const percent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+        setUploadStatus(`Uploading ${percent}%`);
+      },
+      reject,
+      resolve,
+    );
+  });
+
+  const url = await getDownloadURL(task.snapshot.ref);
+  return {
+    url,
+    name: file.name,
+    type: file.type,
+    size: file.size,
+    path: task.snapshot.ref.fullPath,
+  };
 }
 
 function showTextChat() {
@@ -820,7 +882,7 @@ function handleIncomingNotification() {
 
   if (state.settings.desktopNotifications && Notification.permission === "granted" && document.hidden) {
     new Notification(`${newest.displayName || "GlobalChat"}`, {
-      body: newest.text,
+      body: newest.text || newest.media?.name || "Sent a media file",
       icon: newest.avatar || defaultAvatar,
     });
   }
@@ -851,6 +913,7 @@ function renderMessages() {
       const displayName = liveProfile.displayName || message.displayName || "Global user";
       const avatar = liveProfile.avatar || message.avatar || defaultAvatar;
       const createdAt = message.createdAt?.toDate ? message.createdAt.toDate() : new Date();
+      const mediaMarkup = renderMessageMedia(message.media);
 
       return `
         <article class="message">
@@ -860,7 +923,8 @@ function renderMessages() {
               <span class="message-name">${escapeHtml(displayName)}</span>
               <time class="message-time" datetime="${createdAt.toISOString()}">${formatTime(createdAt)}</time>
             </div>
-            <div class="message-text">${escapeHtml(message.text || "")}</div>
+            ${message.text ? `<div class="message-text">${escapeHtml(message.text)}</div>` : ""}
+            ${mediaMarkup}
           </div>
         </article>
       `;
@@ -868,6 +932,27 @@ function renderMessages() {
     .join("");
 
   elements.messages.scrollTop = elements.messages.scrollHeight;
+}
+
+function renderMessageMedia(media) {
+  if (!media?.url) return "";
+  const name = escapeHtml(media.name || "media");
+  const url = escapeHtml(media.url);
+  if (media.type?.startsWith("image/")) {
+    return `
+      <a class="message-media-link" href="${url}" target="_blank" rel="noreferrer">
+        <img class="message-media image-media" src="${url}" alt="${name}" loading="lazy" />
+      </a>
+    `;
+  }
+  if (media.type?.startsWith("video/")) {
+    return `
+      <video class="message-media video-media" controls preload="metadata">
+        <source src="${url}" type="${escapeHtml(media.type)}" />
+      </video>
+    `;
+  }
+  return `<a class="message-file" href="${url}" target="_blank" rel="noreferrer">${name}</a>`;
 }
 
 function renderCurrentUser() {
@@ -907,6 +992,7 @@ function renderMembers() {
 
 function formatTime(date) {
   return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -1047,7 +1133,7 @@ async function showSignedIn(user) {
   elements.messageInput.focus();
 }
 
-function initFirebase() {
+async function initFirebase() {
   if (!hasFirebaseConfig()) {
     elements.setupWarning.classList.remove("hidden");
     setAuthDisabled(true);
@@ -1055,9 +1141,14 @@ function initFirebase() {
     return;
   }
 
-  const app = initializeApp(firebaseConfig);
+  const app = initializeApp(activeFirebaseConfig);
   auth = getAuth(app);
   db = getFirestore(app);
+  storage = getStorage(app);
+  await setPersistence(auth, browserLocalPersistence);
+  firebaseReady = true;
+  setAuthDisabled(false);
+  elements.setupWarning.classList.add("hidden");
   onAuthStateChanged(auth, (user) => {
     if (user) {
       showSignedIn(user).catch((error) => showAuthMessage(formatError(error)));
@@ -1073,6 +1164,25 @@ elements.createForm.addEventListener("submit", createAccount);
 elements.signInForm.addEventListener("submit", signIn);
 elements.googleButton.addEventListener("click", signInGoogle);
 elements.messageForm.addEventListener("submit", sendMessage);
+elements.attachButton.addEventListener("click", () => elements.mediaInput.click());
+elements.mediaInput.addEventListener("change", () => {
+  const file = elements.mediaInput.files?.[0];
+  if (!file) {
+    setUploadStatus("");
+    return;
+  }
+  if (!isMediaFile(file)) {
+    elements.mediaInput.value = "";
+    alert("Choose an image, GIF, or video file.");
+    return;
+  }
+  if (file.size > maxMediaSize) {
+    elements.mediaInput.value = "";
+    alert("File is too large. Keep uploads under 250 MB.");
+    return;
+  }
+  setUploadStatus(`Ready to send: ${file.name}`);
+});
 elements.globalTextButton.addEventListener("click", showTextChat);
 document.querySelectorAll("[data-official-room]").forEach((button) => {
   button.addEventListener("click", () => joinOfficialVoiceRoom(button.dataset.officialRoom));
@@ -1175,4 +1285,8 @@ window.addEventListener("pagehide", () => {
 });
 
 renderSettings();
-initFirebase();
+initFirebase().catch((error) => {
+  firebaseReady = false;
+  setAuthDisabled(true);
+  showAuthMessage(`Firebase could not start: ${formatError(error)}`);
+});

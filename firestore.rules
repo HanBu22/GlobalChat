@@ -2,23 +2,54 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /users/{userId} {
-      allow read: if request.auth != null;
-      allow create, update: if request.auth != null && request.auth.uid == userId;
+    function signedIn() {
+      return request.auth != null;
     }
 
-    match /messages/{messageId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null
-        && request.resource.data.uid == request.auth.uid
+    function validTextMessage() {
+      return request.resource.data.keys().hasAny(['text'])
         && request.resource.data.text is string
         && request.resource.data.text.size() > 0
         && request.resource.data.text.size() <= 500;
     }
 
+    function validMediaMessage() {
+      return request.resource.data.keys().hasAny(['media'])
+        && request.resource.data.media is map
+        && request.resource.data.media.url is string
+        && request.resource.data.media.type is string
+        && request.resource.data.media.size is int
+        && request.resource.data.media.size > 0
+        && request.resource.data.media.size <= 262144000
+        && (
+          request.resource.data.media.type.matches('image/.*')
+          || request.resource.data.media.type.matches('video/.*')
+        );
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /messages/{messageId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          'uid',
+          'text',
+          'displayName',
+          'avatar',
+          'media',
+          'createdAt'
+        ])
+        && (validTextMessage() || validMediaMessage());
+    }
+
     match /voiceRooms/{roomId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null
+      allow read: if signedIn();
+      allow create: if signedIn()
         && request.resource.data.hostUid == request.auth.uid
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -26,8 +57,8 @@ service cloud.firestore {
         && request.resource.data.code is string
         && request.resource.data.isPrivate is bool
         && request.resource.data.participants is list;
-      allow update: if request.auth != null;
-      allow delete: if request.auth != null;
+      allow update: if signedIn();
+      allow delete: if signedIn();
     }
   }
 }

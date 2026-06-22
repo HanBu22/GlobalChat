@@ -18,33 +18,13 @@ Discord-style static chat app that becomes global when connected to Firebase.
 5. Enable **Authentication > Sign-in method > Email/Password**.
 6. Enable **Authentication > Sign-in method > Google** if you want Google sign-in.
 7. Create **Firestore Database**.
-8. Use `firestore.rules`, or paste these Firestore rules for a simple public chat demo:
-
-```txt
-rules_version = '2';
-
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /users/{userId} {
-      allow read: if request.auth != null;
-      allow create, update: if request.auth != null && request.auth.uid == userId;
-    }
-
-    match /messages/{messageId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.text is string
-        && request.resource.data.text.size() > 0
-        && request.resource.data.text.size() <= 500;
-    }
-  }
-}
-```
+8. Use `firestore.rules` in **Firestore Database > Rules**.
+9. Enable **Storage**, then use `storage.rules` in **Storage > Rules** so image, GIF, and video messages can upload.
 
 ## Features
 
 - Real global messages through Firestore.
+- Image, GIF, and video messages through Firebase Storage, up to 250 MB per file.
 - Real account creation through Firebase Authentication.
 - Google sign-in support.
 - Discord-style interface.
@@ -52,10 +32,17 @@ service cloud.firestore {
 - Uploaded profile pictures, compressed and saved with the user profile.
 - Notification sound and desktop notification settings.
 - Logout and local settings reset.
+- Three official voice servers.
+- Unofficial public/private voice servers with generated join codes.
+- Join other servers browser with pages, host name, and start time.
+- Host rename for unofficial voice servers.
+- Local mic, camera, audio device, video filter, and screen share beta controls.
 
 ## Note
 
 Uploaded profile pictures are stored as compressed data URLs in Firestore for simplicity. For a bigger real app, use Firebase Storage for avatars.
+Voice server membership is stored globally in Firestore. Real live audio/video between multiple users requires adding WebRTC signaling and peer connections.
+Firebase Auth uses local browser persistence, so users stay signed in after refresh until they log out.
 
 ## Local preview
 
